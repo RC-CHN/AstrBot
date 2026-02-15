@@ -198,6 +198,7 @@ async def test_update_plugin(plugin_manager_pm: PluginManager, local_updator: Pa
     plugin_info = await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
     assert plugin_info is not None
     plugin_name = plugin_info["name"]
+    assert isinstance(plugin_name, str)
     await plugin_manager_pm.update_plugin(plugin_name)
     assert (local_updator / ".updated").exists()
 
@@ -217,6 +218,7 @@ async def test_uninstall_plugin(plugin_manager_pm: PluginManager, local_updator:
     plugin_info = await plugin_manager_pm.install_plugin(TEST_PLUGIN_REPO)
     assert plugin_info is not None
     plugin_name = plugin_info["name"]
+    assert isinstance(plugin_name, str)
     assert local_updator.exists()
 
     await plugin_manager_pm.uninstall_plugin(plugin_name)
