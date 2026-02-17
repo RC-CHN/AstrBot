@@ -54,8 +54,5 @@ markitdown-no-magika[docx,xls,xlsx]>=0.1.2
 xinference-client
 tenacity>=9.1.2
 shipyard-python-sdk>=0.2.4
-<<<<<<< HEAD
 packaging>=24.2
-=======
 shipyard-neo-sdk @ git+https://github.com/AstrBotDevs/shipyard-neo.git#subdirectory=shipyard-neo-sdk
->>>>>>> d16398a0e (feat(computer): add shipyard_neo booter runtime and sandbox config)
