@@ -54,10 +54,10 @@ The permission matrix applies these dependencies:
 - When **Execute code** is unchecked, **Allow network during execution** cannot be checked, because **network permissions only apply during code execution**.
 - When **File access scope** is **Disabled**, neither execution nor networking can be enabled, because **code execution and network access require file access**.
 
-If your environment **does not meet the requirements for local isolation**, such as Windows without a supported isolation backend, Linux without bubblewrap, or macOS without a usable Seatbelt launcher, the network option is hidden. The following permission combinations remain available:
+If your environment **does not meet the requirements for local isolation**, such as a missing bubblewrap on Linux, an unusable Seatbelt launcher on macOS, or an AppContainer that is not ready on Windows, the network option is hidden. The following permission combinations remain available:
 
 - File access scope: Disabled; Execute code: No.
-- File access scope: Workspace; Execute code: No. This option is available on Linux/macOS; restricted workspace file access is currently unsupported on native Windows.
+- File access scope: Workspace; Execute code: No. This option is available on Linux/macOS.
 - File access scope: Entire environment; Execute code: No.
 - File access scope: Entire environment; Execute code: Yes. Network access during execution cannot be restricted separately.
 
