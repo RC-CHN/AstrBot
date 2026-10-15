@@ -31,6 +31,7 @@ from astrbot.core.astr_main_agent_resources import (
 )
 from astrbot.core.conversation_mgr import Conversation
 from astrbot.core.db import BaseDatabase
+from astrbot.core.llm_error_messages import LLM_ERROR_MESSAGES
 from astrbot.core.message.components import File, Image, Record, Reply, Video
 from astrbot.core.persona_error_reply import (
     extract_persona_custom_error_message_from_persona,
@@ -241,8 +242,19 @@ class MainAgentBuildResult:
     reset_coro: Coroutine | None = None
 
 
-def _set_llm_error_message(event: AstrMessageEvent, message: str) -> None:
-    event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, message)
+def _set_llm_error_message(event: AstrMessageEvent, key: str, **params: str) -> None:
+    """Format an internal LLM error in the requesting client's language.
+
+    Args:
+        event: Message event carrying the optional UI locale.
+        key: Built-in error translation key.
+        **params: Values interpolated into the message.
+    """
+    locale = event.get_extra("locale")
+    if not isinstance(locale, str):
+        locale = "zh-CN"
+    messages = LLM_ERROR_MESSAGES.get(locale, LLM_ERROR_MESSAGES["zh-CN"])
+    event.set_extra(LLM_ERROR_MESSAGE_EXTRA_KEY, messages[key].format(**params))
 
 
 async def _select_provider(
@@ -264,7 +276,8 @@ async def _select_provider(
             logger.error("未找到指定的提供商: %s。", sel_provider)
             _set_llm_error_message(
                 event,
-                f"LLM 请求失败：未找到指定的提供商 `{sel_provider}`。请检查提供商配置或重新选择可用模型。",
+                "providerNotFound",
+                provider=sel_provider,
             )
             return None
         if not isinstance(provider, Provider):
@@ -273,17 +286,20 @@ async def _select_provider(
             )
             _set_llm_error_message(
                 event,
-                f"LLM 请求失败：选择的提供商类型无效（{type(provider).__name__}），已跳过本次请求。",
+                "invalidProviderType",
+                provider_type=type(provider).__name__,
             )
             return None
         return provider
     try:
+        locale = event.get_extra("locale")
+        locale_kwargs = {"locale": locale} if isinstance(locale, str) else {}
         return await plugin_context.get_using_provider_async(
-            umo=event.unified_msg_origin
+            umo=event.unified_msg_origin, **locale_kwargs
         )
     except ValueError as exc:
         logger.error("Error occurred while selecting provider: %s", exc)
-        _set_llm_error_message(event, f"LLM 请求失败：{exc}")
+        _set_llm_error_message(event, "requestFailed", detail=str(exc))
         return None
 
 
@@ -1437,10 +1453,13 @@ def _matches_provider_wake_prefix(
         True when no prefix is configured, WebChat is exempt, or the message
         starts with the configured prefix.
     """
+    message_str = event.message_str or ""
+    if event.get_platform_name() == "lark":
+        message_str = message_str.lstrip()
     return (
         not provider_wake_prefix
         or event.get_platform_name() == "webchat"
-        or (event.message_str or "").startswith(provider_wake_prefix)
+        or message_str.startswith(provider_wake_prefix)
     )
 
 
@@ -1491,8 +1510,8 @@ async def collect_initial_request(
                     )
                 )
                 if conversation is None:
-                    _set_llm_error_message(
-                        event,
+                    event.set_extra(
+                        LLM_ERROR_MESSAGE_EXTRA_KEY,
                         "The requested conversation no longer exists. Please send a new message.",
                     )
                     return None, None
@@ -1510,10 +1529,11 @@ async def collect_initial_request(
                 return None, None
 
             req.prompt = event.message_str
-            if provider_wake_prefix and event.message_str.startswith(
-                provider_wake_prefix
-            ):
-                req.prompt = event.message_str[len(provider_wake_prefix) :]
+            prefix_text = event.message_str
+            if event.get_platform_name() == "lark":
+                prefix_text = prefix_text.lstrip()
+            if provider_wake_prefix and prefix_text.startswith(provider_wake_prefix):
+                req.prompt = prefix_text[len(provider_wake_prefix) :]
 
             # media files attachments
             for comp in event.message_obj.message:
@@ -1740,7 +1760,7 @@ async def build_main_agent(
         if not event.get_extra(LLM_ERROR_MESSAGE_EXTRA_KEY):
             _set_llm_error_message(
                 event,
-                "LLM 请求失败：未找到任何可用的对话模型（提供商）。请先在 WebUI 中配置并启用可用模型。",
+                "noProvider",
             )
         return None
 
