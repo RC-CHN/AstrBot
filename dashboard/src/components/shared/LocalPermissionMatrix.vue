@@ -42,14 +42,25 @@
             </v-tooltip>
           </td>
           <td v-if="!isolationUnavailable">
-            <v-checkbox-btn
-              :model-value="policy(role).allow_network"
-              :disabled="permissionLocks[role].network"
-              :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
-              color="primary"
-              density="compact"
-              @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
-            />
+            <v-tooltip
+              location="top"
+              :disabled="runtime?.os !== 'windows' || policy(role).filesystem_scope !== 'host' || !policy(role).allow_execution"
+              :text="tm('windowsHostNetworkHint')"
+              :max-width="320"
+            >
+              <template #activator="{ props: tooltipProps }">
+                <span v-bind="tooltipProps" class="execution-control">
+                  <v-checkbox-btn
+                    :model-value="policy(role).allow_network"
+                    :disabled="permissionLocks[role].network"
+                    :aria-label="`${tm(`roles.${role}`)} · ${tm('network')}`"
+                    color="primary"
+                    density="compact"
+                    @update:model-value="updatePermission(role, { allow_network: Boolean($event) })"
+                  />
+                </span>
+              </template>
+            </v-tooltip>
           </td>
           <td>
             <v-select
@@ -109,10 +120,7 @@
       @click="isolationDialogOpen = true"
     >
       <ShieldAlert :size="16" aria-hidden="true" />
-      <span>{{ tm(`runtime.setupHint.${runtime.sandbox.status}`, {
-        backend: runtime.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
-        dependency: runtime.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
-      }) }}</span>
+      <span>{{ sandboxSetupHint }}</span>
     </button>
 
     <v-dialog v-model="isolationDialogOpen" max-width="640">
@@ -121,7 +129,7 @@
         <v-card-text class="pa-6 pb-2">
           <p class="text-body-1">{{ tm('runtime.dialog.intro') }}</p>
           <details v-if="runtime?.sandbox?.status === 'unavailable' && runtime.sandbox.error" class="sandbox-diagnostics mt-4">
-            <summary>{{ tm('runtime.dialog.startupError') }}</summary>
+            <summary>{{ tm(windowsSandbox ? 'runtime.errorDetails' : 'runtime.dialog.startupError') }}</summary>
             <pre class="mt-2">{{ runtime.sandbox.error }}</pre>
           </details>
           <a
@@ -178,13 +186,40 @@ const sandboxUnavailable = computed(() => ['missing', 'unavailable'].includes(ru
 const windowsSandbox = computed(() => runtime.value?.sandbox?.backend === 'appcontainer')
 const sandboxBlocked = computed(() => sandboxUnavailable.value && !windowsSandbox.value)
 const isolationUnavailable = computed(() => unsupported.value || sandboxUnavailable.value)
-const executionUnavailableHint = computed(() => isolationUnavailable.value ? tm(
-  `runtime.executionUnavailable.${runtime.value.sandbox.status}`,
-  {
-    backend: runtime.value.sandbox.backend === 'seatbelt' ? 'Seatbelt' : 'bubblewrap',
-    dependency: runtime.value.sandbox.backend === 'seatbelt' ? 'sandbox-exec' : 'bwrap'
+const sandboxBackendLabel = computed(() => ({
+  seatbelt: 'Seatbelt',
+  bubblewrap: 'bubblewrap',
+  appcontainer: 'AppContainer'
+}[runtime.value?.sandbox?.backend] ?? runtime.value?.sandbox?.backend ?? ''))
+const sandboxDependencyLabel = computed(() => ({
+  seatbelt: 'sandbox-exec',
+  bubblewrap: 'bwrap',
+  appcontainer: 'AppContainer'
+}[runtime.value?.sandbox?.backend] ?? runtime.value?.sandbox?.backend ?? ''))
+const sandboxSetupHint = computed(() => {
+  if (runtime.value?.sandbox?.status === 'unsupported') {
+    return tm('runtime.setupHint.unsupported')
   }
-) : '')
+  if (windowsSandbox.value && sandboxUnavailable.value) {
+    return tm('runtime.windowsSetupHint')
+  }
+  return tm(`runtime.setupHint.${runtime.value.sandbox.status}`, {
+    backend: sandboxBackendLabel.value,
+    dependency: sandboxDependencyLabel.value
+  })
+})
+const executionUnavailableHint = computed(() => {
+  if (!isolationUnavailable.value) {
+    return ''
+  }
+  if (windowsSandbox.value && sandboxUnavailable.value) {
+    return tm('runtime.windowsSetupHint')
+  }
+  return tm(`runtime.executionUnavailable.${runtime.value.sandbox.status}`, {
+    backend: sandboxBackendLabel.value,
+    dependency: sandboxDependencyLabel.value
+  })
+})
 const roles = ['member', 'admin']
 const defaults = computed(() => runtime.value?.os === 'windows' ? windowsPermissionDefaults : {
   member: {
